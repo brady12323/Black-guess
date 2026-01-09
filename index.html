@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>黑影猜題遊戲</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap');
+        
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background: radial-gradient(circle, #1a1a2e 0%, #16213e 100%);
+            color: white;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .game-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .puzzle-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            grid-template-rows: repeat(4, 1fr);
+            gap: 0; 
+            background-color: #000;
+            position: relative;
+            aspect-ratio: 4 / 3;
+            border: 8px solid #ffd700;
+            box-shadow: 0 0 30px rgba(0,0,0,0.5);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .painting-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-size: cover;
+            background-position: center;
+            z-index: 0;
+            display: none; 
+        }
+
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #000;
+            z-index: 5;
+            color: #ffd700;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .mask-cell {
+            background-color: #000;
+            z-index: 10;
+            margin: -0.5px;
+            transition: opacity 0.8s ease-out, transform 0.5s ease;
+            border: 0.1px solid rgba(255,255,255,0.05);
+        }
+
+        .mask-cell.revealed {
+            opacity: 0;
+            pointer-events: none;
+            transform: scale(1.1);
+        }
+
+        .progress-bar-container {
+            width: 100%;
+            height: 12px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 6px;
+            margin-top: 20px;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #ff4d4d, #f9ca24);
+            width: 100%;
+            transition: width 1s linear;
+        }
+
+        .btn-gold {
+            background: linear-gradient(135deg, #d4af37 0%, #f9d423 100%);
+            color: #1a1a2e;
+            font-weight: bold;
+            padding: 12px 24px;
+            border-radius: 50px;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            box-shadow: 0 4px 15px rgba(249, 212, 35, 0.3);
+            min-width: 140px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .btn-gold:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(249, 212, 35, 0.5);
+        }
+
+        .btn-outline {
+            background: transparent;
+            color: #ffd700;
+            border: 2px solid #ffd700;
+            font-weight: bold;
+            padding: 12px 24px;
+            border-radius: 50px;
+            transition: all 0.3s;
+            min-width: 140px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .btn-outline:hover:not(:disabled) {
+            background: rgba(255, 215, 0, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .btn-gold:disabled, .btn-outline:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .settings-panel {
+            background: rgba(0, 0, 0, 0.95);
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 100;
+            display: none;
+            padding: 40px;
+            overflow-y: auto;
+        }
+
+        .answer-box {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            margin-top: 20px;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all 0.4s ease-in-out;
+            min-height: 120px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .answer-box.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center">
+
+    <div class="game-container w-full">
+        <div class="text-center mb-6">
+            <h1 class="text-4xl font-black text-yellow-400 mb-2 tracking-widest">黑影猜題</h1>
+            <p id="question-number" class="text-lg text-gray-300">載入中...</p>
+        </div>
+
+        <div class="puzzle-grid" id="puzzle-grid">
+            <div id="loading-overlay" class="loading-overlay">圖片準備中...</div>
+            <div id="painting-bg" class="painting-bg"></div>
+        </div>
+
+        <div class="progress-bar-container">
+            <div id="progress-fill" class="progress-bar-fill"></div>
+        </div>
+        <div class="flex justify-between mt-2 text-sm text-gray-400 font-mono">
+            <span>剩餘時間</span>
+            <span id="timer-text">90s</span>
+        </div>
+
+        <div class="mt-8 flex flex-wrap justify-center gap-4">
+            <button onclick="handleStartPause()" id="main-control-btn" class="btn-gold" disabled>請稍候</button>
+            <button onclick="toggleAnswer()" id="toggle-answer-btn" class="btn-outline">顯示答案</button>
+            <button onclick="nextQuestion()" class="btn-gold">下一題</button>
+            <button onclick="openSettings()" class="bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-full transition h-[50px] flex items-center">⚙️ 設定</button>
+        </div>
+
+        <div id="answer-box" class="answer-box">
+            <h2 id="painting-name" class="text-3xl font-bold text-white"></h2>
+            <p id="artist-name" class="text-xl text-yellow-400 mt-2"></p>
+        </div>
+    </div>
+
+    <!-- 設定面板 -->
+    <div id="settings-panel" class="settings-panel">
+        <div class="max-w-2xl mx-auto">
+            <h2 class="text-3xl font-bold mb-6 text-yellow-400">遊戲題庫設定</h2>
+            <div class="bg-gray-800 p-6 rounded-xl mb-6 border border-gray-700">
+                <p class="mb-4 text-gray-300">您可以上傳自己的圖片（檔名即為答案）：</p>
+                <input type="file" id="image-input" multiple accept="image/*" class="mb-4 block w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-yellow-400 file:text-navy-900 hover:file:bg-yellow-500">
+                <p class="text-xs text-gray-400 bg-gray-900 p-3 rounded leading-relaxed">
+                    💡 <span class="text-yellow-400 font-bold">目前狀態：</span> 程式已內建 5 幅名畫題目。上傳新圖片將會覆蓋掉內建題目。
+                </p>
+            </div>
+            <div id="file-list" class="grid grid-cols-2 gap-2 mb-8"></div>
+            <div class="flex gap-4">
+                <button onclick="applySettings()" class="btn-gold flex-1">套用上傳圖片</button>
+                <button onclick="useDefaultQuiz()" class="btn-outline flex-1">恢復預設題目</button>
+                <button onclick="closeSettings()" class="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-full transition">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 內建題庫，使用高品質且穩定的圖片
+        const defaultQuiz = [
+            { name: "蒙娜麗莎", artist: "達文西", url: "https://images.unsplash.com/photo-1544273677-277914c9ad31?auto=format&fit=crop&q=80&w=1000" },
+            { name: "星夜", artist: "梵谷", url: "https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?auto=format&fit=crop&q=80&w=1000" },
+            { name: "戴珍珠耳環的少女", artist: "維梅爾", url: "https://images.unsplash.com/photo-1582555172866-f73bb12a2ab3?auto=format&fit=crop&q=80&w=1000" },
+            { name: "吶喊", artist: "蒙克", url: "https://images.unsplash.com/photo-1605721911519-3dfeb3be25e7?auto=format&fit=crop&q=80&w=1000" },
+            { name: "維納斯的誕生", artist: "波提切利", url: "https://images.unsplash.com/photo-1578321272176-b7bbc0679b5d?auto=format&fit=crop&q=80&w=1000" }
+        ];
+
+        let quizData = [...defaultQuiz];
+        let currentIndex = 0;
+        let timeLeft = 90;
+        let timerInterval = null;
+        let revealInterval = null;
+        let unrevealedCells = [];
+        let isGameStarted = false;
+        let isPaused = false;
+        let isImageLoaded = false;
+
+        function openSettings() {
+            document.getElementById('settings-panel').style.display = 'block';
+            stopGame();
+        }
+
+        function closeSettings() {
+            document.getElementById('settings-panel').style.display = 'none';
+        }
+
+        function useDefaultQuiz() {
+            quizData = [...defaultQuiz];
+            currentIndex = 0;
+            closeSettings();
+            initGrid();
+        }
+
+        function applySettings() {
+            const input = document.getElementById('image-input');
+            const files = input.files;
+            if (files.length === 0) { alert("請先選取圖片！"); return; }
+
+            quizData = [];
+            for (let file of files) {
+                const fileName = file.name.split('.').slice(0, -1).join('.');
+                const parts = fileName.split('-');
+                quizData.push({
+                    name: parts[0] || "未命名題目",
+                    artist: parts[1] || "",
+                    url: URL.createObjectURL(file)
+                });
+            }
+            currentIndex = 0;
+            closeSettings();
+            initGrid();
+        }
+
+        function initGrid() {
+            isImageLoaded = false;
+            const grid = document.getElementById('puzzle-grid');
+            const overlay = document.getElementById('loading-overlay');
+            const bg = document.getElementById('painting-bg');
+            const mainBtn = document.getElementById('main-control-btn');
+            
+            overlay.style.display = 'flex';
+            overlay.innerText = '圖片載入中...';
+            bg.style.display = 'none';
+            mainBtn.disabled = true;
+
+            document.getElementById('painting-name').innerText = "";
+            document.getElementById('artist-name').innerText = "";
+            document.getElementById('answer-box').classList.remove('show');
+            document.getElementById('toggle-answer-btn').innerText = "顯示答案";
+
+            const existingCells = grid.querySelectorAll('.mask-cell');
+            existingCells.forEach(cell => cell.remove());
+
+            unrevealedCells = [];
+            for (let i = 0; i < 16; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'mask-cell';
+                cell.dataset.index = i;
+                grid.appendChild(cell);
+                unrevealedCells.push(i);
+            }
+
+            const current = quizData[currentIndex];
+            const img = new Image();
+            img.onload = () => {
+                bg.style.backgroundImage = `url('${current.url}')`;
+                bg.style.display = 'block';
+                overlay.style.display = 'none';
+                isImageLoaded = true;
+                mainBtn.disabled = false;
+                mainBtn.innerText = "開始遊戲";
+            };
+            img.onerror = () => { overlay.innerText = '圖片載入失敗，請嘗試下一題或檢查網路'; };
+            img.src = current.url;
+
+            document.getElementById('question-number').innerText = `第 ${currentIndex + 1} 題 / 共 ${quizData.length} 題`;
+            isGameStarted = false;
+            isPaused = false;
+            stopIntervals();
+        }
+
+        function handleStartPause() {
+            if (!isImageLoaded) return;
+            if (!isGameStarted) {
+                isGameStarted = true;
+                isPaused = false;
+                startIntervals();
+                revealRandomCell(); 
+            } else {
+                isPaused = !isPaused;
+                if (isPaused) {
+                    stopIntervals();
+                    document.getElementById('main-control-btn').innerText = "繼續";
+                } else {
+                    startIntervals();
+                    document.getElementById('main-control-btn').innerText = "暫停";
+                }
+            }
+        }
+
+        function startIntervals() {
+            document.getElementById('main-control-btn').innerText = "暫停";
+            timerInterval = setInterval(() => {
+                if (timeLeft > 0) { timeLeft--; updateTimerUI(); } 
+                else { stopGame(); }
+            }, 1000);
+            revealInterval = setInterval(() => { revealRandomCell(); }, 5000);
+        }
+
+        function stopIntervals() {
+            clearInterval(timerInterval);
+            clearInterval(revealInterval);
+        }
+
+        function updateTimerUI() {
+            const percentage = (timeLeft / 90) * 100;
+            document.getElementById('progress-fill').style.width = `${percentage}%`;
+            document.getElementById('timer-text').innerText = `${timeLeft}s`;
+        }
+
+        function revealRandomCell() {
+            if (unrevealedCells.length === 0) return;
+            const randomIndex = Math.floor(Math.random() * unrevealedCells.length);
+            const cellIndex = unrevealedCells.splice(randomIndex, 1)[0];
+            const cell = document.querySelector(`.mask-cell[data-index="${cellIndex}"]`);
+            if (cell) cell.classList.add('revealed');
+        }
+
+        function toggleAnswer() {
+            const box = document.getElementById('answer-box');
+            const btn = document.getElementById('toggle-answer-btn');
+            if (!box.classList.contains('show')) {
+                const current = quizData[currentIndex];
+                document.getElementById('painting-name').innerText = current.name;
+                document.getElementById('artist-name').innerText = current.artist;
+                box.classList.add('show');
+                btn.innerText = "隱藏答案";
+            } else {
+                box.classList.remove('show');
+                btn.innerText = "顯示答案";
+            }
+        }
+
+        function stopGame() {
+            isGameStarted = false;
+            isPaused = false;
+            stopIntervals();
+            document.getElementById('main-control-btn').innerText = "開始遊戲";
+        }
+
+        function nextQuestion() {
+            stopGame();
+            currentIndex = (currentIndex + 1) % quizData.length;
+            timeLeft = 90;
+            updateTimerUI();
+            initGrid();
+        }
+
+        document.getElementById('image-input').addEventListener('change', function(e) {
+            const list = document.getElementById('file-list');
+            list.innerHTML = "";
+            Array.from(e.target.files).forEach((file, index) => {
+                const item = document.createElement('div');
+                item.className = "text-xs text-gray-400 bg-gray-900 p-2 rounded border border-gray-800";
+                item.innerText = `📄 圖片 ${index + 1} 已就緒`;
+                list.appendChild(item);
+            });
+        });
+
+        window.onload = initGrid;
+    </script>
+</body>
+</html>
